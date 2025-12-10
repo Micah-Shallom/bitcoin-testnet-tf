@@ -133,17 +133,7 @@ The node is configured with:
 - **RPC** bound to localhost only
 - **Systemd** service for automatic restart
 
-## File Structure
 
-```
-.
-├── main.tf              # Main Terraform configuration
-├── variables.tf         # Variable definitions
-├── security_group.tf    # Network security rules
-├── output.tf           # Output values
-├── scripts/
-│   └── user_data.sh    # Instance initialization script
-└── terraform.tfvars    # Your configuration (gitignored)
 ```
 
 ## Maintenance
