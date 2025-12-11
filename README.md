@@ -1,225 +1,114 @@
 # Bitcoin Testnet Node on AWS
 
-Terraform configuration to deploy a Bitcoin Core testnet node on AWS EC2 with persistent storage.
+Terraform configuration to deploy a Bitcoin Core testnet node on AWS EC2 with persistent EBS storage.
 
-## Features
+**Features:**
+- One-command deployment with cloud-init automation
+- Persistent EBS volume (preserves blockchain data across instance replacement)
+- Encrypted storage, security groups, systemd auto-restart
+- RPC over localhost only; secure by default
 
-- 🚀 **Automated Setup** - One-command deployment of a fully configured Bitcoin testnet node
-- 💾 **Persistent Storage** - Dedicated EBS volume for blockchain data (survives instance replacement)
-- 🔒 **Secure** - Encrypted volumes, security groups, and systemd service management
-- 📊 **Production Ready** - Systemd service with auto-restart, proper logging via journald
-- ⚡ **Ubuntu 20.04** - Latest LTS with Bitcoin Core installed to `/opt/bitcoin`
+## Setup
 
-## Architecture
-
-- **EC2 Instance**: Ubuntu 20.04 LTS (t3.medium recommended)
-- **Storage**: 300GB EBS volume mounted at `/blockchain/bitcoin/data`
-- **Network**: Testnet with configurable pruning (default: 1GB)
-- **Service**: Systemd-managed `bitcoind` service running as dedicated `bitcoin` user
-
-## Prerequisites
-
-1. **AWS Account** with appropriate permissions
-2. **Terraform** >= 1.0 installed
-3. **SSH Key Pair** created in AWS
-4. **AWS CLI** configured (optional but recommended)
-
-## Quick Start
-
-### 1. Clone and Configure
+### 1. Configure
 
 ```bash
 git clone <your-repo>
 cd bitcoin-testnet-tf
 ```
 
-### 2. Create `terraform.tfvars`
-
+Edit `terraform.tfvars`:
 ```hcl
-# Required
-key_pair_name = "your-aws-keypair-name"
-
-# Optional (defaults shown)
-aws_region         = "us-east-1"
-availability_zone  = "us-east-1a"
-instance_type      = "t3.medium"
-bitcoin_version    = "27.0"
-network            = "testnet"
-ebs_volume_size    = 300
+key_pair_name       = "your-aws-keypair"    # Required
+aws_region          = "us-east-1"
+instance_type       = "t3.medium"
+ebs_volume_size     = 300                   # GB
+bitcoin_version     = "27.0"
+allowed_ssh_cidrs   = ["YOUR_IP/32"]        # Replace with your public IP
 ```
 
-### 3. Deploy
+### 2. Deploy
 
 ```bash
 terraform init
-terraform plan
-terraform apply
+terraform apply -var-file=terraform.tfvars
 ```
 
-### 4. Connect
-
-After deployment completes, get the connection details:
+### 3. Connect
 
 ```bash
-terraform output ssh_connection_command
-```
+ssh -i ~/path/to/key.pem admin@$(terraform output -raw instance_public_ip)
 
-Example:
-
-```bash
-ssh -i /path/to/your-key.pem ubuntu@<elastic-ip>
-```
-
-## Verification
-
-### Check Setup Progress
-
-```bash
+# Monitor setup (takes ~5-10 min)
 tail -f /var/log/bitcoin-setup.log
 ```
 
-Look for: `=== Setup Complete ===`
+## Usage
 
-### Check Bitcoin Service
-
-```bash
-sudo systemctl status bitcoind
-```
-
-### Check Sync Status
-
+**Check Bitcoin status:**
 ```bash
 sudo su - bitcoin
-bitcoin-cli -getinfo
+bitcoin-cli -testnet getblockchaininfo
 ```
 
-Expected output:
-
-```
-Chain: test
-Blocks: 445995
-Headers: 4805575
-Verification progress: ▒░░░░░░░░░░░░░░░░░░░░ 2.4%
-```
-
-### Monitor Logs
-
+**View service logs:**
 ```bash
 sudo journalctl -fu bitcoind
 ```
 
-## Configuration
-
-### Variables
-
-| Variable          | Description                            | Default      |
-| ----------------- | -------------------------------------- | ------------ |
-| `bitcoin_version` | Bitcoin Core version                   | `27.0`       |
-| `network`         | Network type (testnet/mainnet/regtest) | `testnet`    |
-| `instance_type`   | EC2 instance type                      | `t3.medium`  |
-| `ebs_volume_size` | Blockchain storage size (GB)           | `300`        |
-| `rpc_user`        | RPC username                           | `bitcoinrpc` |
-| `rpc_password`    | RPC password (auto-generated if empty) | `""`         |
-| `dbcache`         | Database cache size (MB)               | `1536`       |
-| `max_connections` | Max peer connections                   | `16`         |
-
-### Bitcoin Configuration
-
-The node is configured with:
-
-- **Testnet mode** enabled
-- **Pruning** set to 1GB (configurable in script)
-- **Transaction index** enabled
-- **RPC** bound to localhost only
-- **Systemd** service for automatic restart
-
-
-```
-
-## Maintenance
-
-### Update Bitcoin Version
-
-1. Update `bitcoin_version` in `terraform.tfvars`
-2. Replace the instance:
-   ```bash
-   terraform apply -replace="aws_instance.bitcoin_node"
-   ```
-
-### View RPC Password
-
+**Pause instance (keep data, save $30/month):**
 ```bash
-terraform output bitcoin_rpc_password
+terraform destroy -var-file=terraform.tfvars
+# EBS volume + IP preserved (prevent_destroy = true in main.tf)
 ```
 
-### Destroy Infrastructure
-
+**Resume:**
 ```bash
-terraform destroy
+terraform apply -var-file=terraform.tfvars
+# Syncs only new blocks (~5-15 min instead of 4-8 hours)
 ```
 
-**⚠️ Warning**: This will delete the instance but the EBS volume will be retained by default.
 
-## Troubleshooting
+## Costs & Pause Strategy
 
-### Instance Not Starting
+**Always-on (24/7):** ~$54/month
+- t3.medium EC2: $30/month
+- 300GB EBS: $24/month
 
-Check cloud-init logs:
+**Part-time (8h/day, 5d/week):** ~$34/month (37% savings)
+- Instance only when in use: $10/month
+- EBS storage (always): $24/month
 
-```bash
-ssh ubuntu@<ip>
-tail -f /var/log/cloud-init-output.log
-```
+| Setup | Deploy Time | Sync Time | Monthly Cost |
+|-------|------------|-----------|--------------|
+| Always On | — | Continuous | $54 |
+| Fresh Spin-up | 3 min | 4–8 hours | $54 |
+| Pause & Resume (preserved data) | 3 min | 5–15 min | $34 |
 
-### Bitcoin Not Syncing
+**How it works:**
+1. Destroy instance when done: `terraform destroy` (EBS + IP preserved)
+2. Data stays on EBS volume (prevent_destroy = true in main.tf)
+3. Redeploy later: `terraform apply` (attaches same data, fast sync)
 
-Check bitcoind logs:
+## Security
 
-```bash
-sudo journalctl -fu bitcoind
-```
+- ✅ EBS volumes encrypted by default
+- ✅ RPC bound to localhost only
+- ✅ SSH restricted by CIDR (set `allowed_ssh_cidrs` to your IP)
+- ✅ Bitcoin runs as non-root `bitcoin` user
+- ⚠️ Update `allowed_ssh_cidrs` in `terraform.tfvars` before deploying
 
-### SSH Host Key Changed
+## Variables Reference
 
-After replacing instances:
-
-```bash
-ssh-keygen -f ~/.ssh/known_hosts -R '<instance-ip>'
-```
-
-## Security Notes
-
-- 🔒 EBS volumes are encrypted by default
-- 🔒 RPC is bound to localhost only
-- 🔒 Security group restricts SSH to specified CIDRs
-- 🔒 Bitcoin runs as non-root `bitcoin` user
-- ⚠️ Default SSH CIDR is `0.0.0.0/0` - **change this in production!**
-
-## Costs
-
-Approximate monthly costs (us-east-1):
-
-- **t3.medium instance**: ~$30/month
-- **300GB EBS gp3**: ~$24/month
-- **Elastic IP**: Free (when attached)
-- **Data transfer**: Varies
-
-**Total**: ~$54/month
-
-## License
-
-MIT
-
-## Contributing
-
-Pull requests welcome! Please ensure Terraform formatting:
-
-```bash
-terraform fmt
-```
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `bitcoin_version` | 27.0 | Core version |
+| `instance_type` | t3.medium | Minimum recommended |
+| `ebs_volume_size` | 300 | GB for testnet |
+| `rpc_password` | "" | Auto-generated if empty |
+| `allowed_ssh_cidrs` | ["0.0.0.0/0"] | **Change to your IP/32** |
 
 ## References
 
-- [Bitcoin Core Documentation](https://bitcoin.org/en/bitcoin-core/)
-- [Bitcoin Core Downloads](https://bitcoincore.org/bin/)
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [Bitcoin Core](https://bitcoincore.org/)
+- [Terraform Docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)

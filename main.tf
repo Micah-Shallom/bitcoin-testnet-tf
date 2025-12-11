@@ -41,6 +41,10 @@ resource "aws_ebs_volume" "bitcoin_data" {
     Environment = var.environment
     ManagedBy   = "Terraform"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Create EC2 instance
