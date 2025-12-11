@@ -20,7 +20,7 @@ output "elastic_ip" {
 
 output "ssh_connection_command" {
   description = "Command to SSH into the instance"
-  value       = "ssh -i /path/to/${var.key_pair_name}.pem admin@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip}"
+  value       = "ssh -i /path/to/${var.key_pair_name}.pem ubuntu@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip}"
 }
 
 output "bitcoin_rpc_user" {
@@ -30,7 +30,7 @@ output "bitcoin_rpc_user" {
 
 output "bitcoin_rpc_password" {
   description = "Bitcoin RPC password"
-  value       = var.rpc_password != "" ? var.rpc_password : "Auto-generated (check /home/admin/.bitcoin/bitcoin.conf on the instance)"
+  value       = var.rpc_password != "" ? var.rpc_password : "Auto-generated (check /home/ubuntu/.bitcoin/bitcoin.conf on the instance)"
   sensitive   = true
 }
 
@@ -46,10 +46,10 @@ output "security_group_id" {
 
 output "setup_status_command" {
   description = "Command to check Bitcoin setup status"
-  value       = "ssh -i /path/to/${var.key_pair_name}.pem admin@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip} 'tail -f /var/log/cloud-init-output.log'"
+  value       = "ssh -i /path/to/${var.key_pair_name}.pem ubuntu@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip} 'tail -f /var/log/cloud-init-output.log'"
 }
 
 output "bitcoin_cli_command" {
   description = "Example command to check Bitcoin node status"
-  value       = "ssh -i /path/to/${var.key_pair_name}.pem admin@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip} 'bitcoin-cli -testnet getblockchaininfo'"
+  value       = "ssh -i /path/to/${var.key_pair_name}.pem ubuntu@${var.create_elastic_ip ? aws_eip.bitcoin_node[0].public_ip : aws_instance.bitcoin_node.public_ip} 'bitcoin-cli -testnet getblockchaininfo'"
 }
